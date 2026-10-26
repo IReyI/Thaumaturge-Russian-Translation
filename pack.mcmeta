@@ -1,6 +1,12 @@
 {
   "pack": {
     "pack_format": 34,
-    "description": "Thaumaturge RU"
+    "supported_formats": {
+      "min_inclusive": 34,
+      "max_inclusive": 84
+    },
+    "min_format": 34,
+    "max_format": 84,
+    "description": "Русификатор Thaumaturgy 1.21.1 и 26.1.2"
   }
 }
