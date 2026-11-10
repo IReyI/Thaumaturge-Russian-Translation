@@ -1,0 +1,113 @@
+
+name: Publish to CurseForge
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      changelog:
+        description: "Описание изменений"
+        required: true
+        type: string
+      release_type:
+        description: "Тип публикации"
+        required: true
+        default: "release"
+        type: choice
+        options:
+          - release
+          - beta
+          - alpha
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: Build and upload
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare archive
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${GITHUB_REF_NAME}"
+          ARCHIVE="Thaumaturge-RU-${VERSION}.zip"
+
+          test -f pack.mcmeta || {
+            echo "ERROR: pack.mcmeta not found in repository root"
+            exit 1
+          }
+
+          mkdir -p dist
+
+          zip -r "dist/${ARCHIVE}" . \
+            -x ".git/*" \
+               ".github/*" \
+               "dist/*" \
+               "README.md" \
+               "*.zip"
+
+          echo "archive=dist/${ARCHIVE}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to CurseForge
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CF_PROJECT_ID: ${{ vars.CF_PROJECT_ID }}
+          CF_GAME_VERSIONS: ${{ vars.CF_GAME_VERSIONS }}
+          CHANGELOG_INPUT: ${{ inputs.changelog }}
+          RELEASE_INPUT: ${{ inputs.release_type }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$CURSEFORGE_TOKEN" || -z "$CF_PROJECT_ID" ]]; then
+            echo "Missing CurseForge credentials or project ID"
+            exit 1
+          fi
+
+          VERSION="${GITHUB_REF_NAME}"
+          CHANGELOG="${CHANGELOG_INPUT:-Release ${VERSION}}"
+          RELEASE_TYPE="${RELEASE_INPUT:-release}"
+
+          METADATA=$(jq -n \
+            --arg name "Thaumaturge RU ${VERSION}" \
+            --arg changelog "$CHANGELOG" \
+            --arg release "$RELEASE_TYPE" \
+            --arg versions "$CF_GAME_VERSIONS" \
+            '{
+              displayName: $name,
+              changelog: $changelog,
+              changelogType: "markdown",
+              releaseType: $release,
+              gameVersionNames: ($versions | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))),
+              isMarkedForManualRelease: false
+            }')
+
+          echo "Uploading ${VERSION}..."
+
+          RESPONSE=$(curl --fail-with-body --silent --show-error \
+            -X POST \
+            "https://minecraft.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file" \
+            -H "X-Api-Token: ${CURSEFORGE_TOKEN}" \
+            -F "metadata=${METADATA}" \
+            -F "file=@${{ steps.build.outputs.archive }}")
+
+          echo "CurseForge response:"
+          echo "$RESPONSE" | jq .
+
+      - name: Upload archive as GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Thaumaturge-RU-${{ github.ref_name }}
+          path: ${{ steps.build.outputs.archive }}
+          retention-days: 30

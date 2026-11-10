@@ -1,0 +1,20 @@
+{
+  "id": "thaumaturgeRussian",
+  "version": 9,
+  "capabilities": [
+    "FileFilter",
+    "DirFilter"
+  ],
+  "conf": {
+    "font": {
+      "type": "enum",
+      "default": "font",
+      "values": [
+        "font",
+        "fontaseprite",
+        "fonthoru"
+      ],
+      "reloadType": "Resource"
+    }
+  }
+}
